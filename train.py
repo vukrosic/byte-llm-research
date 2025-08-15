@@ -505,3 +505,14 @@ if __name__ == "__main__":
     print(f"   Validation Loss: {final_metrics['val_loss']:.4f}")
     print(f"   Validation Accuracy: {final_metrics['val_accuracy']:.4f}")
     print(f"   Validation Perplexity: {final_metrics['val_perplexity']:.2f}")
+    
+    # Save the trained model
+    model_save_path = "byte_llm_model.pt"
+    print(f"\n💾 Saving model to {model_save_path}")
+    torch.save({
+        'model_state_dict': model.state_dict(),
+        'config': config,
+        'final_metrics': final_metrics,
+        'training_time': total_time
+    }, model_save_path)
+    print(f"✅ Model saved successfully!")
