@@ -21,7 +21,7 @@ from train import ModelConfig, MinimalLLM, Rotary, MultiHeadAttention, FeedForwa
 @dataclass
 class InferenceConfig:
     # Generation parameters
-    max_new_bytes: int = 1024  # Maximum bytes to generate
+    max_new_bytes: int = 256   # Maximum bytes to generate (reduced to fit context)
     temperature: float = 0.8   # Sampling temperature
     top_k: int = 50           # Top-k sampling
     top_p: float = 0.9        # Nucleus sampling
@@ -140,14 +140,21 @@ class ByteLevelGenerator:
         if max_new_bytes is None:
             max_new_bytes = self.config.max_new_bytes
         
+        # Ensure we don't try to generate more than the context window allows
+        max_new_bytes = min(max_new_bytes, self.config.max_seq_len - 1)
+        
         # Convert prompt to bytes
         input_bytes = self.text_to_bytes(prompt)
         
         # Truncate to fit in context window, leaving room for generation
-        max_prompt_len = self.config.max_seq_len - max_new_bytes
+        max_prompt_len = max(1, self.config.max_seq_len - max_new_bytes)
         if len(input_bytes) > max_prompt_len:
             input_bytes = input_bytes[-max_prompt_len:]
-            print(f"⚠️  Prompt truncated to {max_prompt_len} bytes to fit context window")
+            print(f"⚠️  Prompt truncated to {len(input_bytes)} bytes to fit context window")
+        elif len(input_bytes) == 0:
+            # Handle empty prompt case
+            input_bytes = [32]  # Start with a space character
+            print("⚠️  Empty prompt detected, starting with space character")
         
         # Convert to tensor
         input_ids = torch.tensor(input_bytes, dtype=torch.long, device=self.device).unsqueeze(0)
@@ -254,7 +261,13 @@ def interactive_mode(generator: ByteLevelGenerator):
                 
                 elif cmd == '/length' and len(cmd_parts) > 1:
                     try:
-                        generator.config.max_new_bytes = int(cmd_parts[1])
+                        new_length = int(cmd_parts[1])
+                        max_allowed = generator.config.max_seq_len - 1
+                        if new_length > max_allowed:
+                            print(f"⚠️  Length {new_length} exceeds max context {max_allowed}, setting to {max_allowed}")
+                            generator.config.max_new_bytes = max_allowed
+                        else:
+                            generator.config.max_new_bytes = new_length
                         print(f"✅ Max length set to {generator.config.max_new_bytes}")
                     except ValueError:
                         print("❌ Invalid length value")
