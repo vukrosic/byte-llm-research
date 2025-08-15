@@ -38,7 +38,7 @@ class ByteLevelGenerator:
         
         # Load model
         print(f"🔄 Loading model from {model_path}")
-        checkpoint = torch.load(model_path, map_location=self.device)
+        checkpoint = torch.load(model_path, map_location=self.device, weights_only=False)
         
         # Create model config from checkpoint if available
         if 'config' in checkpoint:
