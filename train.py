@@ -15,6 +15,7 @@ from typing import List, Optional
 import warnings
 import os
 import pickle
+from embedding_tracker import EmbeddingTracker
 warnings.filterwarnings('ignore')
 
 def set_seed(seed: int = 42):
@@ -351,6 +352,10 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
 
     total_params = sum(p.numel() for p in model.parameters())
     print(f"  📊 Total parameters: {total_params:,}")
+    
+    # Initialize embedding tracker
+    tracker = EmbeddingTracker()
+    tracker.capture_embeddings(model, 0)  # Initial state
 
     # Setup optimizers
     optimizers = setup_muon_optimizer(model, config)
@@ -435,7 +440,7 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
                     'lr': f'{optimizers[0].param_groups[0]["lr"]:.2e}'
                 })
 
-            # Evaluation
+            # Evaluation and embedding tracking
             if step % config.eval_every == 0 and step > 0:
                 eval_metrics = evaluate_model(model, val_loader, config)
                 print(f"\nStep {step}: Val Loss: {eval_metrics['val_loss']:.4f}, "
@@ -444,6 +449,10 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
 
                 if eval_metrics['val_loss'] < best_val_loss:
                     best_val_loss = eval_metrics['val_loss']
+                
+                # Capture embeddings for tracking
+                tracker.capture_embeddings(model, step)
+                tracker.print_distance_summary(top_k=5)  # Show top 5 pairs
 
             step += 1
             if step % 100 == 0:
@@ -454,10 +463,22 @@ def train_model(config: ModelConfig, train_loader: DataLoader, val_loader: DataL
     training_time = time.time() - start_time
     print(f"  ⏱️ Training completed in {training_time:.1f} seconds")
 
-    # Final evaluation
+    # Final evaluation and embedding analysis
     final_eval = evaluate_model(model, val_loader, config)
     print(f"  📊 Final - Loss: {final_eval['val_loss']:.4f}, "
           f"Acc: {final_eval['val_accuracy']:.4f}, PPL: {final_eval['val_perplexity']:.2f}")
+    
+    # Final embedding capture and analysis
+    tracker.capture_embeddings(model, step)
+    print(f"\n🎨 Creating embedding evolution visualizations...")
+    tracker.create_all_heatmaps()
+    tracker.create_animated_gif()
+    tracker.save_data()
+    
+    # Show evolution comparison
+    if len(tracker.step_history) > 1:
+        print(f"\n📈 EMBEDDING EVOLUTION SUMMARY")
+        tracker.compare_steps(0, -1)
 
     return model, final_eval
 
