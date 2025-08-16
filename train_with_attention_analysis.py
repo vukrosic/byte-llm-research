@@ -154,6 +154,7 @@ def train_with_attention_tracking():
             # Attention analysis
             if step % config.eval_every == 0 and step > 0:
                 print(f"\n📸 Capturing attention patterns at step {step}...")
+                model.eval()
                 analyzer.capture_attention_patterns(model, sample_input, step)
                 analyzer.analyze_attention_patterns()
                 
@@ -163,6 +164,7 @@ def train_with_attention_tracking():
                     analyzer.visualize_attention_head(0, 0)
                     analyzer.visualize_attention_head(1, 3)
                 
+                model.train()  # Ensure model is back in training mode
                 print()
             
             step += 1
@@ -172,7 +174,9 @@ def train_with_attention_tracking():
     
     # Final attention analysis
     print(f"\n📸 Final attention capture...")
+    model.eval()
     analyzer.capture_attention_patterns(model, sample_input, step)
+    model.train()
     
     # Create comprehensive analysis
     print(f"\n🎨 Creating attention visualizations...")

@@ -38,52 +38,51 @@ class AttentionAnalyzer:
             with torch.no_grad():
                 x = model.token_embedding(input_ids) * (model.config.d_model ** 0.5)
                 x = model.position_dropout(x)
-            
-            for layer_idx, block in enumerate(model.transformer_blocks):
-                # Follow the actual forward pass structure: norm1 -> attention -> residual
-                normed_x = block.norm1(x)
-                attention_layer = block.attention
                 
-                batch_size, seq_len = normed_x.size(0), normed_x.size(1)
-                qkv = attention_layer.qkv(normed_x).reshape(batch_size, seq_len, 3, attention_layer.n_heads, attention_layer.d_k)
-                qkv = qkv.permute(2, 0, 3, 1, 4)
-                Q, K, V = qkv[0], qkv[1], qkv[2]
+                for layer_idx, block in enumerate(model.transformer_blocks):
+                    # Follow the actual forward pass structure: norm1 -> attention -> residual
+                    normed_x = block.norm1(x)
+                    attention_layer = block.attention
+                    
+                    batch_size, seq_len = normed_x.size(0), normed_x.size(1)
+                    qkv = attention_layer.qkv(normed_x).reshape(batch_size, seq_len, 3, attention_layer.n_heads, attention_layer.d_k)
+                    qkv = qkv.permute(2, 0, 3, 1, 4)
+                    Q, K, V = qkv[0], qkv[1], qkv[2]
+                    
+                    # Apply rotary embeddings
+                    Q = attention_layer.rotary(Q)
+                    K = attention_layer.rotary(K)
+                    
+                    # Compute attention weights manually
+                    scores = torch.matmul(Q, K.transpose(-2, -1)) / (attention_layer.d_k ** 0.5)
+                    
+                    # Apply causal mask
+                    causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=scores.device), diagonal=1).bool()
+                    scores.masked_fill_(causal_mask, float('-inf'))
+                    
+                    # Get attention weights
+                    attn_weights = F.softmax(scores, dim=-1)  # [batch, heads, seq_len, seq_len]
+                    
+                    attention_weights.append(attn_weights.detach().cpu().numpy())
+                    
+                    # Continue forward pass: attention -> residual -> norm2 -> ff -> residual
+                    attn_output = torch.matmul(attn_weights, V)
+                    attn_output = attn_output.transpose(1, 2).reshape(batch_size, seq_len, attention_layer.d_model)
+                    x = x + block.dropout(attention_layer.w_o(attn_output))
+                    
+                    # Feed forward block
+                    normed_x2 = block.norm2(x)
+                    ff_out = block.feed_forward(normed_x2)
+                    x = x + block.dropout(ff_out)
                 
-                # Apply rotary embeddings
-                Q = attention_layer.rotary(Q)
-                K = attention_layer.rotary(K)
+                # Store attention patterns
+                self.attention_weights_history.append(attention_weights)
+                self.step_history.append(step)
                 
-                # Compute attention weights manually
-                scores = torch.matmul(Q, K.transpose(-2, -1)) / (attention_layer.d_k ** 0.5)
+                # Compute metrics
+                self.compute_attention_metrics(attention_weights)
                 
-                # Apply causal mask
-                causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=scores.device), diagonal=1).bool()
-                scores.masked_fill_(causal_mask, float('-inf'))
-                
-                # Get attention weights
-                attn_weights = F.softmax(scores, dim=-1)  # [batch, heads, seq_len, seq_len]
-                
-                attention_weights.append(attn_weights.cpu().numpy())
-                
-                # Continue forward pass: attention -> residual -> norm2 -> ff -> residual
-                attn_output = torch.matmul(attn_weights, V)
-                attn_output = attn_output.transpose(1, 2).reshape(batch_size, seq_len, attention_layer.d_model)
-                x = x + block.dropout(attention_layer.w_o(attn_output))
-                
-                # Feed forward block
-                normed_x2 = block.norm2(x)
-                ff_out = block.feed_forward(normed_x2)
-                x = x + block.dropout(ff_out)
-        
-            # Store attention patterns
-            self.attention_weights_history.append(attention_weights)
-            self.step_history.append(step)
-            
-            # Compute metrics
-            self.compute_attention_metrics(attention_weights)
-            
-            model.train()
-            print(f"📸 Captured attention patterns at step {step}")
+                print(f"📸 Captured attention patterns at step {step}")
             
         except Exception as e:
             model.train()
