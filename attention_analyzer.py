@@ -34,16 +34,18 @@ class AttentionAnalyzer:
         model.eval()
         attention_weights = []
         
-        with torch.no_grad():
-            x = model.token_embedding(input_ids) * (model.config.d_model ** 0.5)
-            x = model.position_dropout(x)
+        try:
+            with torch.no_grad():
+                x = model.token_embedding(input_ids) * (model.config.d_model ** 0.5)
+                x = model.position_dropout(x)
             
             for layer_idx, block in enumerate(model.transformer_blocks):
-                # Hook into attention to capture weights
+                # Follow the actual forward pass structure: norm1 -> attention -> residual
+                normed_x = block.norm1(x)
                 attention_layer = block.attention
                 
-                batch_size, seq_len = x.size(0), x.size(1)
-                qkv = attention_layer.qkv(x).reshape(batch_size, seq_len, 3, attention_layer.n_heads, attention_layer.d_k)
+                batch_size, seq_len = normed_x.size(0), normed_x.size(1)
+                qkv = attention_layer.qkv(normed_x).reshape(batch_size, seq_len, 3, attention_layer.n_heads, attention_layer.d_k)
                 qkv = qkv.permute(2, 0, 3, 1, 4)
                 Q, K, V = qkv[0], qkv[1], qkv[2]
                 
@@ -55,7 +57,7 @@ class AttentionAnalyzer:
                 scores = torch.matmul(Q, K.transpose(-2, -1)) / (attention_layer.d_k ** 0.5)
                 
                 # Apply causal mask
-                causal_mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=1).bool()
+                causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=scores.device), diagonal=1).bool()
                 scores.masked_fill_(causal_mask, float('-inf'))
                 
                 # Get attention weights
@@ -63,24 +65,34 @@ class AttentionAnalyzer:
                 
                 attention_weights.append(attn_weights.cpu().numpy())
                 
-                # Continue forward pass
+                # Continue forward pass: attention -> residual -> norm2 -> ff -> residual
                 attn_output = torch.matmul(attn_weights, V)
                 attn_output = attn_output.transpose(1, 2).reshape(batch_size, seq_len, attention_layer.d_model)
                 x = x + block.dropout(attention_layer.w_o(attn_output))
                 
-                # Feed forward
-                ff_out = block.feed_forward(block.norm2(x))
+                # Feed forward block
+                normed_x2 = block.norm2(x)
+                ff_out = block.feed_forward(normed_x2)
                 x = x + block.dropout(ff_out)
         
-        # Store attention patterns
-        self.attention_weights_history.append(attention_weights)
-        self.step_history.append(step)
-        
-        # Compute metrics
-        self.compute_attention_metrics(attention_weights)
-        
-        model.train()
-        print(f"📸 Captured attention patterns at step {step}")
+            # Store attention patterns
+            self.attention_weights_history.append(attention_weights)
+            self.step_history.append(step)
+            
+            # Compute metrics
+            self.compute_attention_metrics(attention_weights)
+            
+            model.train()
+            print(f"📸 Captured attention patterns at step {step}")
+            
+        except Exception as e:
+            model.train()
+            print(f"❌ Failed to capture attention patterns at step {step}: {e}")
+            # Add empty data to maintain step alignment
+            self.attention_weights_history.append([])
+            self.step_history.append(step)
+            self.attention_entropy_history.append([])
+            self.attention_sparsity_history.append([])
     
     def compute_attention_metrics(self, attention_weights: List[np.ndarray]):
         """Compute various metrics for attention patterns"""
