@@ -2,6 +2,10 @@
 
 A minimal transformer-based language model that operates at the byte level, predicting the next byte in a sequence instead of tokens.
 
+- YouTube - https://youtu.be/vXSVJT6T9p8
+
+- Bilibili - https://bilibili.com/video/BV1AGYYzcEFu/
+
 ## Features
 
 - **Byte-level processing**: No tokenizer needed, works with raw UTF-8 bytes
@@ -101,12 +105,62 @@ print(result)
 - **Fine-grained**: Can learn character-level and sub-character patterns
 - **Simple**: No complex tokenizer preprocessing needed
 
+## Usage
+
+### Basic Training & Inference
+```bash
+# Train basic model
+python train.py
+
+# Interactive text generation
+python inference.py byte_llm_model.pt
+
+# Quick demo
+python demo_inference.py
+```
+
+### Analysis & Experiments
+```bash
+# Train with attention analysis
+python train_with_attention_analysis.py
+
+# Run attention mechanism experiments
+python attention_experiments.py
+
+# Focus on letter learning patterns
+python train_letter_focus.py
+
+# Quick embedding evolution demo
+python quick_embedding_demo.py
+
+# Analyze existing model embeddings
+python analyze_embeddings.py
+
+# Quick attention pattern test
+python quick_attention_test.py
+```
+
+### Tracking Tools
+```bash
+# Track letter learning during training
+python letter_tracker.py
+
+# Monitor embedding evolution
+python embedding_tracker.py
+```
+
 ## Files
 
-- `train.py` - Training script with Muon optimizer
+- `train.py` - Basic training script with Muon optimizer
 - `inference.py` - Interactive inference script
 - `demo_inference.py` - Demo generation examples
-- `README.md` - This documentation
+- `train_with_attention_analysis.py` - Training with attention pattern analysis
+- `attention_experiments.py` - Compare different attention mechanisms
+- `train_letter_focus.py` - Training focused on letter pattern learning
+- `analyze_embeddings.py` - Analyze trained model embeddings
+- `embedding_tracker.py` - Track embedding evolution during training
+- `letter_tracker.py` - Monitor letter learning progress
+- `quick_*.py` - Quick demos and tests
 
 ## Training Details
 
